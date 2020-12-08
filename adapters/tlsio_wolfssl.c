@@ -449,15 +449,18 @@ static int on_io_send(WOLFSSL *ssl, char *buf, int sz, void *context)
 
     TLS_IO_INSTANCE* tls_io_instance = (TLS_IO_INSTANCE*)context;
 
-    if (xio_send(tls_io_instance->socket_io, buf, sz, tls_io_instance->on_send_complete, tls_io_instance->on_send_complete_callback_context) != 0)
+    result = xio_send(tls_io_instance->socket_io, buf, sz, tls_io_instance->on_send_complete, tls_io_instance->on_send_complete_callback_context);
+    if (result != 0)
     {
         LogError("Failed sending bytes through underlying IO");
         tls_io_instance->tlsio_state = TLSIO_STATE_ERROR;
         indicate_error(tls_io_instance);
         result = WOLFSSL_CBIO_ERR_GENERAL;
     }
-    else
-    {
+    else if (result == 0 && errno == EAGAIN) {
+        result = WOLFSSL_CBIO_ERR_WANT_WRITE;
+    }
+    else {
         result = sz;
     }
 
