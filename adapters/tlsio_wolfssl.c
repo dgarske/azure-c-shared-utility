@@ -252,26 +252,6 @@ static void indicate_open_complete(TLS_IO_INSTANCE* tls_io_instance, IO_OPEN_RES
     }
 }
 
-static int decode_ssl_received_bytes(TLS_IO_INSTANCE* tls_io_instance)
-{
-    int result = 0;
-    unsigned char buffer[64];
-
-    int rcv_bytes = 0;
-    do
-    {
-        rcv_bytes = wolfSSL_read(tls_io_instance->ssl, buffer, sizeof(buffer));
-        if (rcv_bytes > 0)
-        {
-            if (tls_io_instance->on_bytes_received != NULL)
-            {
-                tls_io_instance->on_bytes_received(tls_io_instance->on_bytes_received_context, buffer, rcv_bytes);
-            }
-        }
-    } while (rcv_bytes > 0);
-    return result;
-}
-
 static void on_underlying_io_open_complete(void* context, IO_OPEN_RESULT open_result)
 {
     TLS_IO_INSTANCE* tls_io_instance = (TLS_IO_INSTANCE*)context;
@@ -287,7 +267,12 @@ static void on_underlying_io_open_complete(void* context, IO_OPEN_RESULT open_re
         int res;
         tls_io_instance->tlsio_state = TLSIO_STATE_IN_HANDSHAKE;
 
-        res = wolfSSL_connect(tls_io_instance->ssl);
+        /* connect needs to be blocking call here */
+        do {
+            res = wolfSSL_connect(tls_io_instance->ssl);
+            if (res != SSL_SUCCESS)
+                res = wolfSSL_get_error(tls_io_instance->ssl, 0);
+        } while (res == WOLFSSL_ERROR_WANT_WRITE || res == WOLFSSL_ERROR_WANT_READ);
         if (res != SSL_SUCCESS)
         {
             // Error codes explained in https://www.wolfssl.com/docs/wolfssl-manual/appendix-c/
@@ -917,13 +902,27 @@ void tlsio_wolfssl_dowork(CONCRETE_IO_HANDLE tls_io)
     else
     {
         TLS_IO_INSTANCE* tls_io_instance = (TLS_IO_INSTANCE*)tls_io;
+        /* why only 64 bytes here, effectiveley this will read up to 64 bytes at a time and issue callback */
+        unsigned char buffer[64];
+        int rcv_bytes = 0;
 
-        if ((tls_io_instance->tlsio_state != TLSIO_STATE_NOT_OPEN) &&
-            (tls_io_instance->tlsio_state != TLSIO_STATE_ERROR))
-        {
-            decode_ssl_received_bytes(tls_io_instance);
-            xio_dowork(tls_io_instance->socket_io);
-        }
+        /* read until nothing left */
+        do {
+            if ((tls_io_instance->tlsio_state != TLSIO_STATE_NOT_OPEN) &&
+                (tls_io_instance->tlsio_state != TLSIO_STATE_ERROR))
+            {
+                xio_dowork(tls_io_instance->socket_io);
+
+                rcv_bytes = wolfSSL_read(tls_io_instance->ssl, buffer, sizeof(buffer));
+                if (rcv_bytes > 0)
+                {
+                    if (tls_io_instance->on_bytes_received != NULL)
+                    {
+                        tls_io_instance->on_bytes_received(tls_io_instance->on_bytes_received_context, buffer, rcv_bytes);
+                    }
+                }
+            }
+        } while (rcv_bytes > 0);
     }
 }
 
