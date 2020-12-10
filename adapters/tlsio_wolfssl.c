@@ -434,6 +434,10 @@ static int on_io_send(WOLFSSL *ssl, char *buf, int sz, void *context)
 
     TLS_IO_INSTANCE* tls_io_instance = (TLS_IO_INSTANCE*)context;
 
+    if (tls_io_instance->tlsio_state != TLSIO_STATE_OPEN) {
+        return WOLFSSL_CBIO_ERR_GENERAL;
+    }
+
     result = xio_send(tls_io_instance->socket_io, buf, sz, tls_io_instance->on_send_complete, tls_io_instance->on_send_complete_callback_context);
     if (result != 0)
     {
@@ -906,23 +910,24 @@ void tlsio_wolfssl_dowork(CONCRETE_IO_HANDLE tls_io)
         unsigned char buffer[64];
         int rcv_bytes = 0;
 
-        /* read until nothing left */
         do {
-            if ((tls_io_instance->tlsio_state != TLSIO_STATE_NOT_OPEN) &&
-                (tls_io_instance->tlsio_state != TLSIO_STATE_ERROR))
+            if ((tls_io_instance->tlsio_state == TLSIO_STATE_NOT_OPEN) ||
+                (tls_io_instance->tlsio_state == TLSIO_STATE_ERROR)) {
+                break;
+            }
+            
+            /* read until nothing left */
+            rcv_bytes = wolfSSL_read(tls_io_instance->ssl, buffer, sizeof(buffer));
+            if (rcv_bytes > 0)
             {
-                xio_dowork(tls_io_instance->socket_io);
-
-                rcv_bytes = wolfSSL_read(tls_io_instance->ssl, buffer, sizeof(buffer));
-                if (rcv_bytes > 0)
+                if (tls_io_instance->on_bytes_received != NULL)
                 {
-                    if (tls_io_instance->on_bytes_received != NULL)
-                    {
-                        tls_io_instance->on_bytes_received(tls_io_instance->on_bytes_received_context, buffer, rcv_bytes);
-                    }
+                    tls_io_instance->on_bytes_received(tls_io_instance->on_bytes_received_context, buffer, rcv_bytes);
                 }
             }
         } while (rcv_bytes > 0);
+
+        xio_dowork(tls_io_instance->socket_io);
     }
 }
 
