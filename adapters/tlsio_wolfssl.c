@@ -374,8 +374,8 @@ static int on_io_recv(WOLFSSL *ssl, char *buf, int sz, void *context)
         while (tls_io_instance->socket_io_read_byte_count == 0 && socket_reads < SOCKET_READ_LIMIT)
         {
             xio_dowork(tls_io_instance->socket_io);
-            if (tls_io_instance->tlsio_state != TLSIO_STATE_IN_HANDSHAKE)
-            {
+            if (tls_io_instance->tlsio_state != TLSIO_STATE_OPEN && 
+                tls_io_instance->tlsio_state != TLSIO_STATE_IN_HANDSHAKE) {
                 break;
             }
             socket_reads++;
@@ -434,7 +434,8 @@ static int on_io_send(WOLFSSL *ssl, char *buf, int sz, void *context)
 
     TLS_IO_INSTANCE* tls_io_instance = (TLS_IO_INSTANCE*)context;
 
-    if (tls_io_instance->tlsio_state != TLSIO_STATE_OPEN) {
+    if (tls_io_instance->tlsio_state != TLSIO_STATE_OPEN && 
+        tls_io_instance->tlsio_state != TLSIO_STATE_IN_HANDSHAKE) {
         return WOLFSSL_CBIO_ERR_GENERAL;
     }
 
