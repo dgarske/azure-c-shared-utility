@@ -479,7 +479,7 @@ static int add_certificate_to_store(TLS_IO_INSTANCE* tls_io_instance)
     int result;
     if (tls_io_instance->certificate != NULL)
     {
-        int res = wolfSSL_CTX_load_verify_buffer(tls_io_instance->ssl_context, (const unsigned char*)tls_io_instance->certificate, strlen(tls_io_instance->certificate), SSL_FILETYPE_PEM);
+        int res = wolfSSL_CTX_load_verify_chain_buffer_format(tls_io_instance->ssl_context, (const unsigned char*)tls_io_instance->certificate, strlen(tls_io_instance->certificate), SSL_FILETYPE_PEM);
         if (res != SSL_SUCCESS)
         {
             LogError("wolfSSL_CTX_load_verify_buffer failed");
